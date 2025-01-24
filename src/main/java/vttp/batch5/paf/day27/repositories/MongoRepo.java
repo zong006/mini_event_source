@@ -25,5 +25,6 @@ public class MongoRepo {
             return false;
         }
     }
+    // question: should there be seperate collections since there are two tables? but the events come grouped in a transaction
 
 }

@@ -1,10 +1,13 @@
 package vttp.batch5.paf.day27.models;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 public class LineItem {
     private int id;
     private String name;
     private int quantity;
-    private float unitPrice;
+    private BigDecimal unitPrice;
     private int poId;
 
     public void setId(int id) { this.id = id; }
@@ -16,8 +19,10 @@ public class LineItem {
     public void setQuantity(int quantity) { this.quantity = quantity; }
     public int getQuantity() { return this.quantity; }
 
-    public void setUnitPrice(float unitPrice) { this.unitPrice = unitPrice; }
-    public float getUnitPrice() { return this.unitPrice; }
+    public void setUnitPrice(float unitPrice) {
+        this.unitPrice = BigDecimal.valueOf(unitPrice).setScale(2,RoundingMode.DOWN); 
+    }
+    public BigDecimal getUnitPrice() { return this.unitPrice; }
 
     public void setPoId(int poId) { this.poId = poId; }
     public int getPoId() { return this.poId; }
