@@ -9,15 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.json.Json;
-import jakarta.json.JsonArray;
-import jakarta.json.JsonArrayBuilder;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonObjectBuilder;
 import vttp.batch5.paf.day27.models.LineItem;
 import vttp.batch5.paf.day27.models.PurchaseOrder;
 import vttp.batch5.paf.day27.repositories.MongoRepo;
@@ -43,17 +39,21 @@ public class PurchaseOrderService {
     if (!persistToDB(po)){
       return null;
     }
+    System.out.println(">>>>> saved to sql!");
     // for mongo Event Store
-    JsonObject poEvent = createPoEvent(po);
-    JsonObject lineItemEvent = createLineItemsEvent(po.getLineItems(), poId);
+    Document poEvent = createPoEvent(po);
+    Document lineItemEvent = createLineItemsEvent(po.getLineItems(), poId);
     boolean persistedToEventStore = mongoRepo.createPurchaseOrderEvent(lineItemEvent) && mongoRepo.createPurchaseOrderEvent(poEvent);
     if (!persistedToEventStore){
       return null;
     }
+    System.out.println(">>>> saved to mongo!");
     // similar code for redis queue
-    if (!(pushEventToRedisQueue(lineItemEvent) && pushEventToRedisQueue(poEvent))){
+    boolean pushedToRedis = redisQueueRepo.pushEventToQueue(lineItemEvent) && redisQueueRepo.pushEventToQueue(poEvent);
+    if (!(pushedToRedis)){
       return null;
     }
+    System.out.println(">>>> saved to redis!");
     return poId;
   }
 
@@ -73,7 +73,7 @@ public class PurchaseOrderService {
     }
   }
 
-  private JsonObject createPoEvent(PurchaseOrder po){
+  private Document createPoEvent(PurchaseOrder po){
     Map<String, String> fields = new HashMap<>();
     fields.put("po_id", po.getPoId());
     fields.put("name", po.getName());
@@ -82,14 +82,13 @@ public class PurchaseOrderService {
     String dateString = sdf.format(po.getDeliveryDate());
     fields.put("delivery_date", dateString);
 
-    System.out.println("delivery date string: " + dateString);
     List<Map<String, String>> fieldList = Arrays.asList(fields);
                         
-    JsonObject event = eventBuilder("purchase_order", "insert", new Date(), fieldList);
+    Document event = eventBuilder("purchase_order", "insert", new Date(), fieldList);
     return event;
   }
 
-  private JsonObject createLineItemsEvent(List<LineItem> lineItems, String poId){
+  private Document createLineItemsEvent(List<LineItem> lineItems, String poId){
     List<Map<String, String>> fieldList = new LinkedList<>();
     for (LineItem item : lineItems){
       Map<String, String> fields = new HashMap<>();
@@ -100,36 +99,28 @@ public class PurchaseOrderService {
       fieldList.add(fields);
     }
 
-    JsonObject event = eventBuilder("line_items", "insert", new Date(), fieldList);
-   return event;
+    Document event = eventBuilder("line_items", "insert", new Date(), fieldList);
+    return event;
   }
 
-  private boolean pushEventToRedisQueue(JsonObject event){
-    return redisQueueRepo.pushEventToQueue(event);
-  }
-
-
-  private JsonObject eventBuilder(String tableName, String action, Date eventDate, List<Map<String,String>> fields){
-    JsonArrayBuilder jab = Json.createArrayBuilder();
-  
+  private Document eventBuilder(String tableName, String action, Date eventDate, List<Map<String,String>> fields){
+    // parse list of fields to a document array
+    List<Document> fieldsDocArray = new LinkedList<>();
     for (Map<String, String> field : fields){
-        JsonObjectBuilder fieldBuilder = Json.createObjectBuilder();
-
-        for (Map.Entry<String, String> entry : field.entrySet()){
-            fieldBuilder.add(entry.getKey(), entry.getValue());
-        }
-        JsonObject fieldJsonObject = fieldBuilder.build();
-        jab.add(fieldJsonObject);
+      Document entry = new Document(field);
+      fieldsDocArray.add(entry);
     }
-    JsonArray fieldsArray = jab.build();
 
-    JsonObjectBuilder job = Json.createObjectBuilder();
-    JsonObject jsonData = job.add("tableName", tableName)
-                                .add("action", action)
-                                .add("eventDate", eventDate.toString())
-                                .add("fields", fieldsArray)
-                                .build();
-    return jsonData;
+    Document event = new Document();
+    String eventId = UUID.randomUUID().toString().substring(0, 12);
+
+    event.put("eventId", eventId);
+    event.put("tableName", tableName);
+    event.put("action", action);
+    event.put("eventDate", eventDate);
+    event.put("fields", fieldsDocArray);
+
+    return event;
   }
 
 

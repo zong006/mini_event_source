@@ -51,13 +51,4 @@ public class Utils {
                 return li;
             }).toList();
     }
-
-    
-    
-    // public static Event createEvent(String tableName, String action, Date evenDate, Map<String,String> fields){
-        
-        
-    // }
-
-
 }

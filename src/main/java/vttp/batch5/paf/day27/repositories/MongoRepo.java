@@ -14,10 +14,9 @@ public class MongoRepo {
     private MongoTemplate mongoTemplate;
 
     // insert event document
-    public boolean createPurchaseOrderEvent(JsonObject event){
-        Document d = Document.parse(event.toString());
+    public boolean createPurchaseOrderEvent(Document event){
         try {
-            mongoTemplate.insert(d, MongoConstants.MONGO_C_NAME);
+            mongoTemplate.insert(event, MongoConstants.MONGO_C_NAME);
             return true;
         } catch (RuntimeException e) {
             e.printStackTrace();
